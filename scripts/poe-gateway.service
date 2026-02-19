@@ -1,0 +1,13 @@
+[Unit]
+Description=Poe AI Gateway
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/poe-gateway
+Restart=always
+RestartSec=5
+Environment=HOME=%h
+
+[Install]
+WantedBy=default.target
