@@ -1,7 +1,15 @@
 package main
 
-import "fmt"
+import (
+	"log"
+
+	"github.com/fjrt/poeai/internal/node"
+)
 
 func main() {
-	fmt.Println("Poe Node — coming soon")
+	srv := node.New()
+	log.Println("Poe Node starting on :7332")
+	if err := srv.ListenAndServe(":7332"); err != nil {
+		log.Fatalf("node server: %v", err)
+	}
 }
