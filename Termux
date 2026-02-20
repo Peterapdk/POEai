@@ -1,0 +1,485 @@
+Skip to main content
+Running OpenClaw in Termux proot-distro debian : r/termux
+
+Open menu
+Go to Reddit Answers
+
+Expand search
+Create post
+Open inbox
+
+
+Expand user menu
+
+Go to termux
+r/termux
+18d ago
+LeftAd1220
+Join
+
+Running OpenClaw in Termux proot-distro debian
+General
+
+This is a quick sharing of the catches when installing OpenClaw in proot debian.
+
+Alpine won't work because @mariozechner/clipboard native plugin does not have linux arm64 musl version
+
+I'm using Asus ROG phone 9 pro edition: SD 8 Elite, 24GB RAM
+
+I installed it in a separate App of mine running proot using the Termux proot binary so it should be roughly the same.
+
+Unfortunately I haven't been able to run this by a local model on my phone. I've set up Ollama but running a model as an agent requires like 10 times the power as compared with only chatting with it due to a large prompt by many tools. Now only showcasing using Gemini API.
+
+Dependencies
+I recommend using fish as the shell for its out-of-the-box auto-completions and also a quick checker if the command you're going to run exists(red if not exist)
+
+I personally use micro to view files
+
+make sure you can run apt update properly, if not use:
+
+printf "nameserver 8.8.8.8\nnameserver 1.1.1.1">/etc/resolv.conf
+
+then
+
+apt install curl git cmake build-essential zstd unzip
+
+Installing Node.js and Bun
+I haven't tried installing directly by Bun so I'm currently installing using npm and then run: bun $(which openclaw)
+
+The reason of using Bun is that if you run openclaw by node it's just too slow. Even if it's only openclaw --help, it takes a very long time even on my 8 Elite.
+
+Node.js
+Use the official script from here
+
+I run it by using micro inode.sh to save it to a file and then sh inode.sh
+
+After installing you don't automatically get it in your $PATH so you need to do sth like this on every login:
+
+export PATH="/root/versions/node/v25.5.0/bin:$PATH"
+
+Bun
+Use the official script:
+
+curl -fsSL https://bun.sh/install | bash
+
+After installing it will prompt you to also export to $PATH manually on every login
+
+export BUN_INSTALL="$HOME/.bun"
+
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+Installing by npm and patching it
+npm i -g openclaw
+
+In the process it seems like it builds some kind of llama.cpp in the background so it will take a very long time
+
+After installing don't rush into running that openclaw command directly. Some patches are needed for it to work properly
+
+To be specific, you have to patch os.networkInterfaces() : directly give it a static value
+
+In my case I chose to do:
+
+Under native Termux, switch to the root's home folder of your proot debian:
+
+cd $PREFIX/var/lib/proot-distro/installed-rootfs/debian/root
+
+node -e 'fs.writeFileSync("./ni.json",JSON.stringify(os.networkInterfaces()))'
+
+And then for each file needing the patch read file and return JSON.parse
+
+I currently found 3 files to be patched under ~/versions/node/v25.5.0/lib/node_modules:
+
+openclaw/dist/infra/system-presence.js
+
+openclaw/dist/infra/tailnet.js
+
+openclaw/node_modules/@homebridge/ciao/lib/NetworkManager.js
+
+For the first two files, add to the beginning:
+
+import fs from "node:fs";
+
+And search for os.networkInterfaces() and replace with:
+
+JSON.parse(fs.readFileSync('/root/ni.json').toString())
+
+For the 3rd file search for os_1.default.networkInterfaces() and replace with:
+
+JSON.parse(require('fs').readFileSync('/root/ni.json').toString())
+
+Running OpenClaw & authenticating by Gemini CLI
+Install Gemini CLI
+npm i -g @google/gemini-cli
+
+Ensure xdg-open
+Then make sure xdg-open is able to open a browser window to authenticate properly.
+
+You can first install a GUI or do some tricks like this:
+
+mv /usr/bin/xdg-open /usr/bin/xdg-open.bak
+
+printf '#!/bin/sh\necho "$@">>/data/data/com.termux/files/home/authurl.txt'>/usr/bin/xdg-open
+
+chmod +x /usr/bin/xdg-open
+
+remember to restore xdg-open if needed after authentication
+
+Running onboard
+bun $(which openclaw) onboard
+
+this will guide you through setting up Gemini API as the provider.
+
+If you did the trick mentioned above to xdg-open, open a separate Termux tab and:
+
+cat authurl.txt
+
+to look for the url to open manually
+
+Get the access token
+In proot debian
+
+micro ~/.openclaw/openclaw.json
+
+look for gateway.auth.token and copy it
+
+Running gateway(WebUI server)
+bun $(which openclaw) gateway &
+
+Open in the browser http://localhost:18789
+
+Paste the auth token in the prev section and start your journey
+
+Be careful about isolation though
+
+I would recommend using:
+
+pd login --isolated debian
+
+before actually running the gateway
+
+If you want graphical Apps to work, run in Termux native:
+
+termux-x11 :0 -listen tcp -ac &
+
+export DISPLAY=:0
+
+LIBGL_ALWAYS_SOFTWARE=1 xfwm4 &
+
+And then run X11 over TCP in proot by:
+
+export DISPLAY=:0
+
+konsole or some other app
+
+Edit: Browser automation
+https://youtube.com/shorts/EsimoncQJw8?si=d-NA0Rkl5nqPttYy
+
+Unfortunately, this function needs to be run by Node.js and not Bun for the gateway
+
+also needs a patch to openclaw/dist/pw-ai-*.js
+
+hardcode a:
+
+const endpoint = "http://127.0.0.1:18791" ; //
+
+as the endpoint for connectOverCDP
+
+.
+
+In the OpenClaw config -> browser,
+
+I've turned on No Sandbox and Browser Evaluate Enabled
+
+Set the default profile to openclaw
+
+Set cdp url to the endpoint above
+
+.
+
+open a test browser window first by:
+
+openclaw browser --browser-profile=openclaw open https://reddit.com
+
+then test automation function first by:
+
+openclaw browser --browser-profile=openclaw snapshot --efficient
+
+
+Upvote
+31
+
+Downvote
+
+8
+Go to comments
+
+
+Share
+
+Sort by:
+
+Best
+
+Search Comments
+Expand comment search
+Comments Section
+
+Black-Mack
+•
+18d ago
+Ollama is bloat, ditch it.
+
+Llama cpp is lighter & faster but I guess it will still require the extra power which a phone cannot afford on top of OpenClaw proot.
+
+
+
+LeftAd1220
+OP
+•
+17d ago
+I don't think we can blame ollama for this one. The method of OpenClaw calling it is via http://localhost:11434/v1 endpoint. I'm running ollama in Termux native so there's no proot overhead there. If you run the exact same model by "ollama run" it is pretty fast and feeling as snappy as llama-cli. The problem is just that as an agent OpenClaw calls the api by lots of structured JSON tools and functions for the model to utilize. Thus expanding every single prompt to at least 11k. 
+
+
+
+Black-Mack
+•
+17d ago
+That's a lot! Thanks for the explanation.
+
+
+ethereal_intellect
+•
+18d ago
+Apparently codex are having a double/free promotion, does this work with codex?
+
+
+
+LeftAd1220
+OP
+•
+4d ago
+OpenClaw has many options for AI providers. Just run onboard and follow the steps. I'm currently using GPT-5.2-codex for browser automation.
+
+
+Environmental_Mud415
+•
+17d ago
+The post i was looking for!!!!
+
+Description-Serious
+•
+11d ago
+8s there a vutton i can click that does all this for me?
+
+
+LeftAd1220
+OP
+•
+4d ago
+Guys, I've added instructions for browser automation today! Enjoy~
+
+More posts you may like
+I Scanned Popular OpenClaw Skills - Here's What I Found
+
+r/hacking
+•
+8d ago
+I Scanned Popular OpenClaw Skills - Here's What I Found
+415 upvotes · 44 comments
+Update: OpenClaw working in Termux natively with no proot or root (but no local LLM)
+
+r/termux
+•
+8d ago
+Update: OpenClaw working in Termux natively with no proot or root (but no local LLM)
+
+2
+35 upvotes · 3 comments
+Debian proot-distro (KDE Plasma)
+
+r/termux
+•
+3mo ago
+Debian proot-distro (KDE Plasma)
+
+4:55
+21 upvotes · 9 comments
+Added OpenClaw-powered Missions to my Robot
+
+r/robotics
+•
+16d ago
+Added OpenClaw-powered Missions to my Robot
+
+3:28
+14 upvotes · 8 comments
+OpenClaw on Android without proot-distro — native Termux, one command, ~50MB
+
+r/termux
+•
+5d ago
+OpenClaw on Android without proot-distro — native Termux, one command, ~50MB
+
+3
+11 upvotes · 4 comments
+Openclaw? (a.k.a Moltbot, Clawdbot)
+
+r/SteamDeck
+•
+18d ago
+Openclaw? (a.k.a Moltbot, Clawdbot)
+12 comments
+🚀OpenClaw Setup for Absolute Beginners (Include A One-Click Setup Guide)
+
+r/SaaS
+•
+14d ago
+🚀OpenClaw Setup for Absolute Beginners (Include A One-Click Setup Guide)
+3 upvotes · 10 comments
+OpenClaw almost working natively without proot
+
+r/termux
+•
+14d ago
+OpenClaw almost working natively without proot
+
+2
+24 upvotes · 2 comments
+Configured proot-distro debian
+
+r/termux
+•
+3mo ago
+Configured proot-distro debian
+
+16 upvotes · 22 comments
+Install & Customizes debian proot-distro (no root)
+
+r/termux
+•
+4mo ago
+Install & Customizes debian proot-distro (no root)
+
+14:21
+77 upvotes · 38 comments
+Why debian proot distro randomly exist?
+
+r/termux
+•
+5mo ago
+Why debian proot distro randomly exist?
+
+2
+26 upvotes · 23 comments
+Lightweight desktop running inside termux on Android
+
+r/termux
+•
+1mo ago
+Lightweight desktop running inside termux on Android
+
+5
+243 upvotes · 93 comments
+[Guide][Video] How to install Gnome in Termux (Debian proot)
+
+r/termux
+•
+2y ago
+[Guide][Video] How to install Gnome in Termux (Debian proot)
+
+3
+29 upvotes · 10 comments
+Lightweight Openbox desktop on Termux (new features, smoother ₍^. .^₎⟆)
+
+r/termux
+•
+1mo ago
+Lightweight Openbox desktop on Termux (new features, smoother ₍^. .^₎⟆)
+
+5
+81 upvotes · 19 comments
+[Tool] Automated Installer for OpenClaw on Android via Termux
+
+r/termux
+•
+7d ago
+[Tool] Automated Installer for OpenClaw on Android via Termux
+
+79 upvotes · 18 comments
+Why does PRoot Distro offer the 'oldstable' version of Debian (i.e. Debian 11 Bullseye)? Is it for maintaining backwards compatibility to support certain applications, or has a different use case where latest version leads to conflicts/problems?
+
+r/termux
+•
+1y ago
+Why does PRoot Distro offer the 'oldstable' version of Debian (i.e. Debian 11 Bullseye)? Is it for maintaining backwards compatibility to support certain applications, or has a different use case where latest version leads to conflicts/problems?
+
+5 upvotes · 8 comments
+Installing Debian on Android via Termux and Proot
+
+r/debian
+•
+9mo ago
+Installing Debian on Android via Termux and Proot
+13 upvotes · 13 comments
+My simple Termux + Debian + ChRoot setup
+
+r/termux
+•
+10mo ago
+My simple Termux + Debian + ChRoot setup
+
+41 upvotes · 7 comments
+Preparing to create a Debian installer in Termux
+
+r/termux
+•
+1y ago
+Preparing to create a Debian installer in Termux
+
+53 upvotes · 8 comments
+Debian 13 AMD64 Linux OS (Termux)
+
+r/termux
+•
+2mo ago
+Debian 13 AMD64 Linux OS (Termux)
+
+28 upvotes · 22 comments
+My Termux Setup
+
+r/termux
+•
+5mo ago
+My Termux Setup
+
+6
+76 upvotes · 12 comments
+My Termux Setup
+
+r/termux
+•
+5mo ago
+My Termux Setup
+
+81 upvotes · 21 comments
+Running OpenClaw on macOS with Mixflow AI (GPT-5.2, Claude Opus 4.6, Gemini Pro 3) — Full Setup Guide with their $150 credits Resources
+
+r/replit
+•
+11d ago
+Running OpenClaw on macOS with Mixflow AI (GPT-5.2, Claude Opus 4.6, Gemini Pro 3) — Full Setup Guide with their $150 credits Resources
+2 upvotes · 1 comment
+What to do on termux?
+
+r/termux
+•
+26d ago
+What to do on termux?
+30 upvotes · 55 comments
+I built a real-time monitoring dashboard for OpenClaw agents — open source, zero dependencies
+
+r/homelab
+•
+10d ago
+I built a real-time monitoring dashboard for OpenClaw agents — open source, zero dependencies
+10 comments
