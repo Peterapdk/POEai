@@ -17,9 +17,16 @@ type Config struct {
 
 // LLMConfig configures the language model backend.
 type LLMConfig struct {
-	Provider string `toml:"provider"`
-	Model    string `toml:"model"`
+	Provider string           `toml:"provider"`
+	Model    string           `toml:"model"`
+	Auth     map[string]*Auth `toml:"auth"`
+}
+
+// Auth defines the authentication strategy for a specific provider.
+type Auth struct {
+	Strategy string `toml:"strategy"` // "apikey" or "oauth"
 	APIKey   string `toml:"api_key"`
+	Token    string `toml:"token"` // OAuth token or comparable mechanism
 }
 
 // GatewayConfig configures the gateway daemon.
@@ -43,10 +50,15 @@ type NodeConfig struct {
 
 func defaults() Config {
 	home, _ := os.UserHomeDir()
+
+	authMap := make(map[string]*Auth)
+	authMap["anthropic"] = &Auth{Strategy: "apikey"}
+
 	return Config{
 		LLM: LLMConfig{
 			Provider: "anthropic",
 			Model:    "claude-opus-4-6",
+			Auth:     authMap,
 		},
 		Gateway: GatewayConfig{
 			Socket: filepath.Join(home, ".poe", "poe.sock"),
@@ -69,4 +81,21 @@ func Load(path string) (Config, error) {
 	}
 	_, err := toml.DecodeFile(path, &cfg)
 	return cfg, err
+}
+
+// Save saves the current configuration to the given path.
+func (c Config) Save(path string) error {
+	// Ensure directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return toml.NewEncoder(f).Encode(c)
 }

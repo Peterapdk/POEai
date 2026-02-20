@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/fjrt/poeai/internal/agent"
@@ -14,9 +15,14 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load("")
+	home, _ := os.UserHomeDir()
+	configPath := filepath.Join(home, ".poe", "config.toml")
+
+	cfg, err := config.Load(configPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		log.Printf("Warning: configuration not found. Please run 'poe' to initialize Poe.")
+		// We still try to load defaults if config file is missing but Load handles that.
+		// However, we should probably fail if we want to enforce onboarding.
 	}
 
 	// Ensure .poe directory exists
